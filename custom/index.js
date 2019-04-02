@@ -7,72 +7,145 @@ const LaunchRequestHandler = {
    },
    handle(handlerInput) {
 
-       const airportNames = 	[
-           {
-               "id": "LAS",
-               "name": {
-                   "value": "La Serena",
-                   "synonyms": [
-                       "papaya"
-                   ]
-               }
-           },
-           {
-               "id": "TEM",
-               "name": {
-                   "value": "Temuco",
-                   "synonyms": [
-                       "mapuche",
-                       "pucón"
-                   ]
-               }
-           }
-       ];
-
-       const airportNamesEntities = {
-           type: "Dialog.UpdateDynamicEntities",
-           updateBehavior: "REPLACE",
-           types: [
-               {
-                   name: "AirportType",
-                   values: airportNames
-               }
-           ]
-       };
-
-
-       const speechText = 'Bienvenido a aeropuerto! ¿Adónde quieres viajar?';
+       const speechText = 'Bienvenido a ver tus reuniones';
        return handlerInput.responseBuilder
-           .addDirective(airportNamesEntities)
            .speak(speechText)
            .reprompt(speechText)
            .getResponse();
    }
 };
 
-const TravelIntentHandler = {
+const CreateMeetingIntentHandler = {
    canHandle(handlerInput) {
        return handlerInput.requestEnvelope.request.type === 'IntentRequest'
-           && handlerInput.requestEnvelope.request.intent.name === 'TravelIntent';
+           && handlerInput.requestEnvelope.request.intent.name === 'CreateMeetingIntent';
    },
    handle(handlerInput) {
 
-       let value = handlerInput.requestEnvelope.request.intent.slots.airport.value;
+     let value = handlerInput.requestEnvelope.request.intent.slots.NewMeetingName.value;
+
+      const session = handlerInput.attributesManager.getSessionAttributes();
+      if (isEmpty (session.meetingList )) {
+          session.meetingList = [];
+      }
+      session.meetingList.push(value);
+      handlerInput.attributesManager.setSessionAttributes(session);
+
+      const MeetingList = [];
+      if (! isEmpty (session.meetingList )) {
+        session.meetingList.forEach( function(element, index, array) {
+          MeetingList.push({
+            "id": index,
+            "name" : {
+              "value": element,
+              "synonyms" : []
+            }
+          });
+        });
+      }
+
+      const meetingNamesEntities = {
+          type: "Dialog.UpdateDynamicEntities",
+          updateBehavior: "REPLACE",
+          types: [
+              {
+                  name: "meetingNameType",
+                  values: MeetingList
+              }
+          ]
+      };
 
        let speechText = "";
 
        if ( !isEmpty(value) ) {
-         speechText += "Viajando a: " + value;
+         speechText += "Creando reunión " + value;
        }
        else {
-         speechText += "Hm...no entendí donde viajas";
+         speechText += "Hm...no recibí el meeting";
        }
 
        return handlerInput.responseBuilder
+           .addDirective(meetingNamesEntities)
            .speak(speechText)
-           //.reprompt('add a reprompt if you want to keep the session open for the user to respond')
+           .reprompt(speechText)
            .getResponse();
    }
+};
+
+const ListMeetingIntentHandler = {
+   canHandle(handlerInput) {
+       return handlerInput.requestEnvelope.request.type === 'IntentRequest'
+           && handlerInput.requestEnvelope.request.intent.name === 'ListMeetingIntent';
+   },
+   handle(handlerInput) {
+
+     let speechText = "";
+
+      const session = handlerInput.attributesManager.getSessionAttributes();
+      if (isEmpty (session.meetingList )) {
+          speechText += "No hay reuniones definidas";
+      } else {
+          session.meetingList.forEach( function(element, index, array) {
+            speechText += "Reunión: " + element + ". ";
+          });
+      }
+
+       return handlerInput.responseBuilder
+           .speak(speechText)
+           .reprompt(speechText)
+           .getResponse();
+   }
+};
+
+const StartedInProgressDeleteMeetingIntentHandler = {
+    canHandle(handlerInput) {
+        return handlerInput.requestEnvelope.request.type === "IntentRequest" &&
+            handlerInput.requestEnvelope.request.intent.name === "DeleteMeetingIntent" &&
+            handlerInput.requestEnvelope.request.dialogState !== 'COMPLETED';
+    },
+    handle(handlerInput) {
+
+        return handlerInput.responseBuilder
+            .addDelegateDirective()
+            .getResponse();
+    }
+};
+
+const DeleteMeetingIntentHandler = {
+  canHandle(handlerInput) {
+    console.log("Input: " + JSON.stringify(handlerInput.requestEnvelope));
+    return handlerInput.requestEnvelope.request.type === "IntentRequest"
+      && handlerInput.requestEnvelope.request.intent.name === "DeleteMeetingIntent"
+      && handlerInput.requestEnvelope.request.dialogState === 'COMPLETED';
+
+  },
+  handle(handlerInput) {
+
+    let value = handlerInput.requestEnvelope.request.intent.slots.meetingName.value;
+    let resolutions = handlerInput.requestEnvelope.request.intent.slots.meetingName.resolutions;
+
+    if (!isEmpty(resolutions)) {
+      resolutions.resolutionsPerAuthority.forEach(function(element, index, array){
+        if (!isEmpty(element.values)) {
+          value += " con identificador: " + JSON.stringify(element.values);
+        }
+      });
+    }
+
+    let speechText = "";
+
+    if ( !isEmpty(value) ) {
+      speechText += "Eliminando reunión " + value;
+    }
+    else {
+      speechText += "Hm...no recibí el meeting";
+    }
+
+    return handlerInput.responseBuilder
+      .speak(speechText)
+      .reprompt(speechText)
+      .getResponse();
+  }
 };
 
 const HelpIntentHandler = {
@@ -111,18 +184,13 @@ const SessionEndedRequestHandler = {
        return handlerInput.responseBuilder.getResponse();
    }
 };
-
-// The intent reflector is used for interaction model testing and debugging.
-// It will simply repeat the intent the user said. You can create custom handlers
-// for your intents by defining them above, then also adding them to the request
-// handler chain below.
 const IntentReflectorHandler = {
    canHandle(handlerInput) {
        return handlerInput.requestEnvelope.request.type === 'IntentRequest';
    },
    handle(handlerInput) {
        const intentName = handlerInput.requestEnvelope.request.intent.name;
-       const speechText = `You just triggered ${intentName}`;
+       const speechText = `Evento no capturado... ${intentName}`;
 
        return handlerInput.responseBuilder
            .speak(speechText)
@@ -130,10 +198,6 @@ const IntentReflectorHandler = {
            .getResponse();
    }
 };
-
-// Generic error handling to capture any syntax or routing errors. If you receive an error
-// stating the request handler chain is not found, you have not implemented a handler for
-// the intent being invoked or included it in the skill builder below.
 const ErrorHandler = {
    canHandle() {
        return true;
@@ -150,63 +214,22 @@ const ErrorHandler = {
 };
 
 
-const getStaticAndDynamicSlotValues = function(slots) {
-   const slotValues = {}
-   for (let slot in slots) {
-       slotValues[slot] = getStaticAndDynamicSlotValuesFromSlot(slots[slot]);
-   }
-   return slotValues;
-}
-
-const getStaticAndDynamicSlotValuesFromSlot = function(slot) {
-
-   const result = {
-       name: slot.name,
-       value: slot.value
-   };
-
-   if (((slot.resolutions || {}).resolutionsPerAuthority || [])[0] || {}) {
-       slot.resolutions.resolutionsPerAuthority.forEach((authority) => {
-           const slotValue = {
-               authority: authority.authority,
-               statusCode: authority.status.code,
-               synonym: slot.value || undefined,
-               resolvedValues: slot.value
-           };
-           if (authority.values && authority.values.length > 0) {
-               slotValue.resolvedValues = [];
-
-               authority.values.forEach((value) => {
-                   slotValue.resolvedValues.push(value);
-               });
-
-           }
-
-           if (authority.authority.includes('amzn1.er-authority.echo-sdk.dynamic')) {
-               result.dynamic = slotValue;
-           } else {
-               result.static = slotValue;
-           }
-       });
-   }
-   return result;
-};
-
 function isEmpty(val){
     return (val === undefined || val == null || val.length <= 0) ? true : false;
 }
 
-// This handler acts as the entry point for your skill, routing all request and response
-// payloads to the handlers above. Make sure any new handlers or interceptors you've
-// defined are included below. The order matters - they're processed top to bottom.
 exports.handler = Alexa.SkillBuilders.custom()
    .addRequestHandlers(
        LaunchRequestHandler,
-       TravelIntentHandler,
+       CreateMeetingIntentHandler,
+       ListMeetingIntentHandler,
+       StartedInProgressDeleteMeetingIntentHandler,
+       DeleteMeetingIntentHandler,
        HelpIntentHandler,
        CancelAndStopIntentHandler,
        SessionEndedRequestHandler,
-       IntentReflectorHandler) // make sure IntentReflectorHandler is last so it doesn't override your custom intent handlers
+       IntentReflectorHandler)
    .addErrorHandlers(
        ErrorHandler)
+  //.withTableName("NewMeeting")
    .lambda();
