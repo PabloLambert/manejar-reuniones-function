@@ -1,5 +1,5 @@
 const Alexa = require('ask-sdk');
-
+const uuid = require('uuid');
 
 const LaunchRequestHandler = {
    canHandle(handlerInput) {
@@ -25,35 +25,15 @@ const CreateMeetingIntentHandler = {
      let value = handlerInput.requestEnvelope.request.intent.slots.NewMeetingName.value;
 
       const session = handlerInput.attributesManager.getSessionAttributes();
+
       if (isEmpty (session.meetingList )) {
           session.meetingList = [];
       }
-      session.meetingList.push(value);
+      addMeeting(session.meetingList, value);
+      console.log("meetingList: " + JSON.stringify(session.meetingList));
       handlerInput.attributesManager.setSessionAttributes(session);
 
-      const MeetingList = [];
-      if (! isEmpty (session.meetingList )) {
-        session.meetingList.forEach( function(element, index, array) {
-          MeetingList.push({
-            "id": index,
-            "name" : {
-              "value": element,
-              "synonyms" : []
-            }
-          });
-        });
-      }
-
-      const meetingNamesEntities = {
-          type: "Dialog.UpdateDynamicEntities",
-          updateBehavior: "REPLACE",
-          types: [
-              {
-                  name: "meetingNameType",
-                  values: MeetingList
-              }
-          ]
-      };
+      const meetingNamesEntities = getDynamicEntities(session.meetingList);
 
        let speechText = "";
 
@@ -86,7 +66,7 @@ const ListMeetingIntentHandler = {
           speechText += "No hay reuniones definidas";
       } else {
           session.meetingList.forEach( function(element, index, array) {
-            speechText += "Reunión: " + element + ". ";
+            speechText += "Reunión: " + element.name + ". ";
           });
       }
 
@@ -124,24 +104,33 @@ const DeleteMeetingIntentHandler = {
     let value = handlerInput.requestEnvelope.request.intent.slots.meetingName.value;
     let resolutions = handlerInput.requestEnvelope.request.intent.slots.meetingName.resolutions;
 
+    const session = handlerInput.attributesManager.getSessionAttributes();
+
+    let isFound = false;
+
     if (!isEmpty(resolutions)) {
       resolutions.resolutionsPerAuthority.forEach(function(element, index, array){
-        if (!isEmpty(element.values)) {
-          value += " con identificador: " + JSON.stringify(element.values);
+        if (!isEmpty(element.values) && !isEmpty(element.values.value)) {
+          if ( deleteMeeting(session.meetingList, element.values.value.id ) ) {
+            isFound = true;
+          }
         }
       });
     }
 
+    handlerInput.attributesManager.setSessionAttributes(session);
+    const meetingNamesEntities = getDynamicEntities(session.meetingList);
+
     let speechText = "";
 
-    if ( !isEmpty(value) ) {
+    if (isFound) {
       speechText += "Eliminando reunión " + value;
-    }
-    else {
-      speechText += "Hm...no recibí el meeting";
+    } else {
+      speechText += "Hm...no encontré el meeting";
     }
 
     return handlerInput.responseBuilder
+      .addDirective(meetingNamesEntities)
       .speak(speechText)
       .reprompt(speechText)
       .getResponse();
@@ -213,8 +202,56 @@ const ErrorHandler = {
    }
 };
 
+function addMeeting( meetingList, meetingName) {
+  if ( meetingList != null ) {
+    meetingList.push( {
+      'name': meetingName,
+      'id': uuid.v1()
+    });
+  }
+}
 
-function isEmpty(val){
+function deleteMeeting(meetingList, meetingId) {
+  if (!isEmpty(meetingList)) {
+    meetingList.forEach(function(element, index, array) {
+      if ( element.id === meetingId ) {
+          meetingList.splice(index, 1);
+          return true;
+      }
+    });
+  }
+  return false;
+}
+
+function getDynamicEntities(meetingList) {
+  const entities = [];
+
+  if (! isEmpty (meetingList )) {
+    meetingList.forEach( function(element, index, array) {
+      entities.push({
+        "id": element.id,
+        "name" : {
+          "value": element.name,
+          "synonyms" : []
+        }
+      });
+    });
+  }
+
+  return  {
+    type: "Dialog.UpdateDynamicEntities",
+    updateBehavior: "REPLACE",
+    types: [
+      {
+        name: "meetingNameType",
+        values: entities
+      }
+    ]
+  };
+}
+
+
+function isEmpty(val) {
     return (val === undefined || val == null || val.length <= 0) ? true : false;
 }
 
