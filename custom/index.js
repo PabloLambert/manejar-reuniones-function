@@ -29,8 +29,9 @@ const CreateMeetingIntentHandler = {
       if (isEmpty (session.meetingList )) {
           session.meetingList = [];
       }
+
       addMeeting(session.meetingList, value);
-      console.log("meetingList: " + JSON.stringify(session.meetingList));
+
       handlerInput.attributesManager.setSessionAttributes(session);
 
       const meetingNamesEntities = getDynamicEntities(session.meetingList);
@@ -62,11 +63,17 @@ const ListMeetingIntentHandler = {
      let speechText = "";
 
       const session = handlerInput.attributesManager.getSessionAttributes();
-      if (isEmpty (session.meetingList )) {
+
+      if ( isEmpty(session.meetingList) ) {
           speechText += "No hay reuniones definidas";
       } else {
+          if (session.meetingList.length == 1 ) {
+            speechText += "La reunión es: ";
+          } else {
+            speechText += "Las reuniones son: ";
+          }
           session.meetingList.forEach( function(element, index, array) {
-            speechText += "Reunión: " + element.name + ". ";
+            speechText += element.name + " ";
           });
       }
 
@@ -110,15 +117,19 @@ const DeleteMeetingIntentHandler = {
 
     if (!isEmpty(resolutions)) {
       resolutions.resolutionsPerAuthority.forEach(function(element, index, array){
-        if (!isEmpty(element.values) && !isEmpty(element.values.value)) {
-          if ( deleteMeeting(session.meetingList, element.values.value.id ) ) {
-            isFound = true;
-          }
+        if (!isEmpty(element.values)) {
+          console.log("PerAuth: " + JSON.stringify(element.values));
+          element.values.forEach( function(e, i, a) {
+            if ( deleteMeeting(session.meetingList, e.value.id ) ) {
+              isFound = true;
+            }
+          });
         }
       });
     }
 
     handlerInput.attributesManager.setSessionAttributes(session);
+
     const meetingNamesEntities = getDynamicEntities(session.meetingList);
 
     let speechText = "";
@@ -212,15 +223,16 @@ function addMeeting( meetingList, meetingName) {
 }
 
 function deleteMeeting(meetingList, meetingId) {
+  let isFound = false;
   if (!isEmpty(meetingList)) {
     meetingList.forEach(function(element, index, array) {
       if ( element.id === meetingId ) {
           meetingList.splice(index, 1);
-          return true;
+          isFound = true;
       }
     });
   }
-  return false;
+  return isFound;
 }
 
 function getDynamicEntities(meetingList) {
